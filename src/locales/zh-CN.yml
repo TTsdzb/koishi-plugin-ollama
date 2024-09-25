@@ -1,0 +1,17 @@
+commands:
+  resetchat:
+    description: "清除上下文，重新开始对话。"
+    options:
+      target: "指定清除对象。仅 Bot 3 级或以上权限可用。"
+    messages:
+      success: "已清除对话记录。重新开始吧！"
+      successWithTarget: "已清除 {0} 的对话记录。重新开始吧！"
+ollama-chat:
+  messages:
+    contentTooLong: 内容过长，请修改后重新发送。
+
+_config:
+  endpoint: "Ollama API 地址。"
+  enableChat: "是否启用简易的聊天功能。此功能没有内容审查且私聊与群聊（群聊中@机器人）均可用，请在确保不会被恶意使用的情况下开启。"
+  tooLongThreshold: "判定用户消息太长的阈值。"
+  chatModelName: "聊天使用的模型名称。"

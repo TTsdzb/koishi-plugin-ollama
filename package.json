@@ -2,6 +2,14 @@
   "name": "koishi-plugin-ollama",
   "description": "适用于Koishi的Ollama插件",
   "version": "0.0.1",
+  "contributors": [
+    "TTsdzb <ttsdzb@outlook.com>"
+  ],
+  "homepage": "https://github.com/TTsdzb/koishi-plugin-ollama",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TTsdzb/koishi-plugin-ollama.git"
+  },
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -9,14 +17,25 @@
     "dist"
   ],
   "license": "MIT",
-  "scripts": {},
   "keywords": [
     "chatbot",
     "koishi",
     "plugin"
   ],
-  "devDependencies": {},
   "peerDependencies": {
     "koishi": "^4.18.0"
+  },
+  "koishi": {
+    "description": {
+      "zh": "Ollama插件，提供Ollama API接入服务与基本的聊天功能（可选）"
+    },
+    "service": {
+      "implements": [
+        "ollama"
+      ]
+    }
+  },
+  "dependencies": {
+    "ollama": "^0.5.9"
   }
 }

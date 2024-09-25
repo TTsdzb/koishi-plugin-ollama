@@ -1,11 +1,101 @@
-import { Context, Schema } from 'koishi'
+import { Context, h, Logger, Schema, Service } from "koishi";
+import { Message, Ollama } from "ollama";
 
-export const name = 'ollama'
+class OllamaService extends Service {
+  chatContexts: Map<string, Message[]> = new Map();
 
-export interface Config {}
+  public api: Ollama;
 
-export const Config: Schema<Config> = Schema.object({})
+  constructor(ctx: Context, config: OllamaService.Config) {
+    super(ctx, "ollama");
+    ctx.i18n.define("zh-CN", require("./locales/zh-CN"));
 
-export function apply(ctx: Context) {
-  // write your plugin here
+    const logger = new Logger("ollama");
+    logger.debug("Config:", config);
+
+    this.api = new Ollama({ host: config.endpoint });
+
+    if (config.enableChat) {
+      ctx
+        .command("resetChat")
+        .option("user", "-u [target:user]", { authority: 3 })
+        .action(({ session, options }) => {
+          const target = options.user
+            ? options.user
+            : session.guildId
+            ? session.gid
+            : session.uid;
+          logger.debug("Trying to reset for:", target);
+
+          this.chatContexts.delete(target);
+          return session.i18n(
+            options.user ? ".successWithTarget" : ".success",
+            [target]
+          );
+        });
+
+      ctx.middleware(async (session, next) => {
+        const at = h.select(session.elements, "at")[0];
+        if (session.guildId && (!at || at.attrs.id !== session.bot.userId))
+          return next();
+
+        const source = session.guildId ? session.gid : session.uid;
+
+        const content =
+          (session.guildId ? `${session.username}：` : "") +
+          h.transform(session.content, { at: false, quote: false }).trim();
+        logger.debug(`Message from ${source}:`, content);
+
+        if (content.length > config.tooLongThreshold)
+          return session.i18n("ollama-chat.messages.contentTooLong");
+
+        if (!this.chatContexts.has(source)) this.chatContexts.set(source, []);
+        const chatContext = this.chatContexts.get(source);
+        logger.debug(`History context for ${source}:`, chatContext);
+
+        chatContext.push({ role: "user", content });
+        const res = await this.api.chat({
+          model: config.chatModelName,
+          messages: chatContext,
+          stream: false,
+        });
+        chatContext.push(res.message);
+        return h("quote", { id: session.messageId }) + res.message.content;
+      });
+    }
+  }
+}
+
+namespace OllamaService {
+  export const Config: Schema<Config> = Schema.intersect([
+    Schema.object({
+      endpoint: Schema.string().default("http://localhost:11434"),
+      enableChat: Schema.boolean().default(false),
+    }),
+    Schema.union([
+      Schema.object({
+        enableChat: Schema.const(true).required(),
+        tooLongThreshold: Schema.number().default(100),
+        chatModelName: Schema.string().required(),
+      }),
+      Schema.object({}),
+    ]),
+  ]).i18n({
+    "zh-CN": require("./locales/zh-CN")._config,
+  }) as Schema<Config>;
+
+  export interface Config {
+    endpoint: string;
+    enableChat: boolean;
+    tooLongThreshold: number;
+    chatModelName: string;
+  }
+}
+
+export default OllamaService;
+
+declare module "koishi" {
+  interface Context {
+    ollama: OllamaService;
+  }
 }
