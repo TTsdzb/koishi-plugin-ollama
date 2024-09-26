@@ -8,7 +8,10 @@ commands:
       successWithTarget: "已清除 {0} 的对话记录。重新开始吧！"
 ollama-chat:
   messages:
-    contentTooLong: 内容过长，请修改后重新发送。
+    contentTooLong: "内容过长，请修改后重新发送。"
+    connTimeout: "服务器连接超时，请联系 Bot 管理员。"
+    connRefused: "服务器拒绝了连接，请联系 Bot 管理员。"
+    unknownError: "发生未知错误，请联系 Bot 管理员。"
 
 _config:
   endpoint: "Ollama API 地址。"

@@ -54,13 +54,27 @@ class OllamaService extends Service {
         logger.debug(`History context for ${source}:`, chatContext);
 
         chatContext.push({ role: "user", content });
-        const res = await this.api.chat({
-          model: config.chatModelName,
-          messages: chatContext,
-          stream: false,
-        });
-        chatContext.push(res.message);
-        return h("quote", { id: session.messageId }) + res.message.content;
+        try {
+          const res = await this.api.chat({
+            model: config.chatModelName,
+            messages: chatContext,
+            stream: false,
+          });
+          chatContext.push(res.message);
+          return h("quote", { id: session.messageId }) + res.message.content;
+        } catch (e) {
+          chatContext.pop();
+
+          if (e.cause?.code === "UND_ERR_CONNECT_TIMEOUT")
+            return session.i18n("ollama-chat.messages.connTimeout");
+          if (e.cause?.code === "ECONNREFUSED")
+            return session.i18n("ollama-chat.messages.connRefused");
+
+          logger.error("Unknown error when chat:");
+          logger.error(e);
+          console.log(e);
+          return session.i18n("ollama-chat.messages.unknownError");
+        }
       });
     }
   }
