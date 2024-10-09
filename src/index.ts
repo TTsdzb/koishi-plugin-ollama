@@ -1,8 +1,95 @@
-import { Context, h, Logger, Schema, Service } from "koishi";
+import { Context, h, Logger, Schema, Service, Session } from "koishi";
 import { Message, Ollama } from "ollama";
 
+interface UserMessage {
+  id: string;
+  name: string;
+  time: string;
+  msg: string;
+}
+
+abstract class ChatContext {
+  public abstract trace(message: UserMessage): void;
+  public abstract prepareRequest(): Message[];
+  public abstract finishRequest(assistant_message: Message): void;
+  public abstract cancelRequest(): void;
+}
+
+class PrivateChatContext extends ChatContext {
+  tracedMsg: UserMessage;
+  history: Message[];
+
+  constructor() {
+    super();
+    this.tracedMsg = undefined;
+    this.history = [];
+  }
+
+  public trace(message: UserMessage) {
+    this.tracedMsg = message;
+  }
+
+  public prepareRequest(): Message[] {
+    this.history.push({
+      role: "user",
+      content: JSON.stringify(this.tracedMsg),
+    });
+    return this.history;
+  }
+
+  public finishRequest(assistant_message: Message) {
+    this.history.push(assistant_message);
+  }
+
+  public cancelRequest() {
+    this.history.pop();
+  }
+}
+
+class GuildChatContext extends ChatContext {
+  tracedMsg: UserMessage[];
+  history: Message[];
+
+  constructor() {
+    super();
+    this.tracedMsg = [];
+    this.history = [];
+  }
+
+  public trace(message: UserMessage) {
+    this.tracedMsg.push(message);
+    if (this.tracedMsg.length > 100) this.tracedMsg.splice(0, 1);
+  }
+
+  public prepareRequest(): Message[] {
+    this.history.push({
+      role: "user",
+      content: JSON.stringify(this.tracedMsg),
+    });
+    return this.history;
+  }
+
+  public finishRequest(assistant_message: Message) {
+    this.tracedMsg = [];
+    this.history.push(assistant_message);
+  }
+
+  public cancelRequest() {
+    this.history.pop();
+  }
+}
+
+const extractUserMessage = (session: Session): UserMessage => {
+  return {
+    id: session.userId,
+    name: session.username,
+    time: new Date(session.timestamp).toString(),
+    msg: session.content,
+  };
+};
+
 class OllamaService extends Service {
-  chatContexts: Map<string, Message[]> = new Map();
+  chatContexts: Map<string, ChatContext> = new Map();
 
   public api: Ollama;
 
@@ -36,34 +123,43 @@ class OllamaService extends Service {
 
       ctx.middleware(async (session, next) => {
         const at = h.select(session.elements, "at")[0];
-        if (session.guildId && (!at || at.attrs.id !== session.bot.userId))
-          return next();
 
         const source = session.guildId ? session.gid : session.uid;
+        logger.debug(`Message from ${source}:`, session.content);
 
-        const content =
-          (session.guildId ? `${session.username}：` : "") +
-          h.transform(session.content, { at: false, quote: false }).trim();
-        logger.debug(`Message from ${source}:`, content);
-
-        if (content.length > config.tooLongThreshold)
-          return session.i18n("ollama-chat.messages.contentTooLong");
-
-        if (!this.chatContexts.has(source)) this.chatContexts.set(source, []);
+        if (!this.chatContexts.has(source)) {
+          this.chatContexts.set(
+            source,
+            session.guildId ? new GuildChatContext() : new PrivateChatContext()
+          );
+        }
         const chatContext = this.chatContexts.get(source);
+
+        const tooLong = session.content.length > config.tooLongThreshold;
+        const userMessage = extractUserMessage(session);
+        if (!tooLong) chatContext.trace(userMessage);
+        if (
+          session.guildId &&
+          (!at || at.attrs.id !== session.bot.userId) &&
+          !session.content.startsWith("@Koishi")
+        )
+          return next();
+
+        if (tooLong) return session.i18n("ollama-chat.messages.contentTooLong");
+
         logger.debug(`History context for ${source}:`, chatContext);
 
-        chatContext.push({ role: "user", content });
+        const history = chatContext.prepareRequest();
         try {
           const res = await this.api.chat({
             model: config.chatModelName,
-            messages: chatContext,
+            messages: history,
             stream: false,
           });
-          chatContext.push(res.message);
+          chatContext.finishRequest(res.message);
           return h("quote", { id: session.messageId }) + res.message.content;
         } catch (e) {
-          chatContext.pop();
+          chatContext.cancelRequest();
 
           if (e.cause?.code === "UND_ERR_CONNECT_TIMEOUT")
             return session.i18n("ollama-chat.messages.connTimeout");
