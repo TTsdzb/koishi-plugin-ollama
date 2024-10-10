@@ -9,6 +9,12 @@ interface UserMessage {
 }
 
 abstract class ChatContext {
+  history: Message[];
+
+  constructor() {
+    this.history = [];
+  }
+
   public abstract trace(message: UserMessage): void;
   public abstract prepareRequest(): Message[];
   public abstract finishRequest(assistant_message: Message): void;
@@ -17,12 +23,10 @@ abstract class ChatContext {
 
 class PrivateChatContext extends ChatContext {
   tracedMsg: UserMessage;
-  history: Message[];
 
   constructor() {
     super();
     this.tracedMsg = undefined;
-    this.history = [];
   }
 
   public trace(message: UserMessage) {
@@ -48,12 +52,10 @@ class PrivateChatContext extends ChatContext {
 
 class GuildChatContext extends ChatContext {
   tracedMsg: UserMessage[];
-  history: Message[];
 
   constructor() {
     super();
     this.tracedMsg = [];
-    this.history = [];
   }
 
   public trace(message: UserMessage) {
