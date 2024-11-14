@@ -60,7 +60,7 @@ class GuildChatContext extends ChatContext {
 
   public trace(message: UserMessage) {
     this.tracedMsg.push(message);
-    if (this.tracedMsg.length > 100) this.tracedMsg.splice(0, 1);
+    if (this.tracedMsg.length > 20) this.tracedMsg.splice(0, 1);
   }
 
   public prepareRequest(): Message[] {
@@ -112,14 +112,14 @@ class OllamaService extends Service {
           const target = options.user
             ? options.user
             : session.guildId
-            ? session.gid
-            : session.uid;
+              ? session.gid
+              : session.uid;
           logger.debug("Trying to reset for:", target);
 
           this.chatContexts.delete(target);
           return session.i18n(
             options.user ? ".successWithTarget" : ".success",
-            [target]
+            [target],
           );
         });
 
@@ -132,7 +132,7 @@ class OllamaService extends Service {
         if (!this.chatContexts.has(source)) {
           this.chatContexts.set(
             source,
-            session.guildId ? new GuildChatContext() : new PrivateChatContext()
+            session.guildId ? new GuildChatContext() : new PrivateChatContext(),
           );
         }
         const chatContext = this.chatContexts.get(source);
